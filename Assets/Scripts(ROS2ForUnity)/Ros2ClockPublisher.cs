@@ -1,6 +1,8 @@
 using UnityEngine;
 using ROS2;
 using Unity.Robotics.Core; // この行は残します
+// いえ消します
+
 
 public class Ros2ClockPublisher : MonoBehaviour
 {
