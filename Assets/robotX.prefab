@@ -2568,10 +2568,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a48464f895212c596a9c4b9866432bc4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  robotNamespace: robot1
+  robotNamespace: robotX
   topicBase: scan
   frameIdBase: base_scan
-  publishPeriodSeconds: 0.2
+  publishPeriodSeconds: 0.1
   rangeMetersMin: 0.1
   rangeMetersMax: 10
   scanAngleStartDegrees: 0
@@ -3147,6 +3147,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2255700138473264788}
   - component: {fileID: 1674564496960709679}
+  - component: {fileID: 4984448294851464780}
   m_Layer: 0
   m_Name: ROS2ForUnityPublishers
   m_TagString: Untagged
@@ -3181,11 +3182,26 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d09b6ef38add5e758bd3f7db2beb02ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  robotNamespace: robot1
-  m_PublishRateHz: 20
-  m_GlobalFrameIds:
+  robotNamespace: robotX
+  publishRateHz: 30
+  globalFrameIds:
   - odom
-  m_RootGameObject: {fileID: 9211329766417118903}
+  rootGameObject: {fileID: 0}
+--- !u!114 &4984448294851464780
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7672869240156511178}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6bc60189290eb7072a7e8dff7cc9302b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  robotNamespace: robotX
+  baseLink: {fileID: 0}
+  publishRateHz: 20
 --- !u!1 &7848282776315908126
 GameObject:
   m_ObjectHideFlags: 0

@@ -6,7 +6,6 @@ using Unity.Robotics.Core;
 public class Ros2LaserScanPublisher_3 : MonoBehaviour
 {
     [Header("Robot Namespace")]
-    [Tooltip("robot1 / robot2")]
     public string robotNamespace = "robot1";
 
     [Header("ROS2 Settings")]
@@ -19,45 +18,61 @@ public class Ros2LaserScanPublisher_3 : MonoBehaviour
     public float rangeMetersMax = 10f;
     public float scanAngleStartDegrees = 135f;
     public float scanAngleEndDegrees = -135f;
-    public int numMeasurementsPerScan = 750;
+    public int numMeasurementsPerScan = 360;
 
     private ROS2Node node;
     private IPublisher<sensor_msgs.msg.LaserScan> publisher;
     private List<float> ranges;
-    private double timeNextScanSeconds;
+    private double nextPublishTimeSeconds;
 
-    string NsTopic(string baseName) => string.IsNullOrEmpty(robotNamespace) ? $"/{baseName}" : $"/{robotNamespace}/{baseName}";
-    string NsFrame(string baseFrame) => string.IsNullOrEmpty(robotNamespace) ? baseFrame : $"{robotNamespace}/{baseFrame}";
-    string NodeName(string baseName) => string.IsNullOrEmpty(robotNamespace) ? baseName : $"{robotNamespace}_{baseName}";
+    string NsTopic(string baseName) =>
+        string.IsNullOrEmpty(robotNamespace) ? $"/{baseName}" : $"/{robotNamespace}/{baseName}";
+
+    string NsFrame(string baseFrame) =>
+        string.IsNullOrEmpty(robotNamespace) ? baseFrame : $"{robotNamespace}/{baseFrame}";
+
+    string NodeName(string baseName) =>
+        string.IsNullOrEmpty(robotNamespace) ? baseName : $"{robotNamespace}_{baseName}";
 
     void Start()
     {
         var ros2UnityComponent = FindObjectOfType<ROS2UnityComponent>();
+        if (ros2UnityComponent == null)
+        {
+            Debug.LogError("ROS2UnityComponent not found.", this);
+            enabled = false;
+            return;
+        }
+
         node = ros2UnityComponent.CreateNode(NodeName("laser_scan_publisher"));
         publisher = node.CreatePublisher<sensor_msgs.msg.LaserScan>(NsTopic(topicBase));
         ranges = new List<float>(numMeasurementsPerScan);
-        timeNextScanSeconds = Unity.Robotics.Core.Clock.Now;
+        nextPublishTimeSeconds = Unity.Robotics.Core.Clock.Now;
     }
 
-    void Update()
+    void FixedUpdate()
     {
-        if (Unity.Robotics.Core.Clock.Now < timeNextScanSeconds) return;
+        if (Unity.Robotics.Core.Clock.Now < nextPublishTimeSeconds)
+            return;
+
         PerformScan();
         PublishScan();
-        timeNextScanSeconds = Unity.Robotics.Core.Clock.Now + publishPeriodSeconds;
+        nextPublishTimeSeconds = Unity.Robotics.Core.Clock.Now + publishPeriodSeconds;
     }
 
     private void PerformScan()
     {
         ranges.Clear();
+
         var yawBaseDegrees = transform.rotation.eulerAngles.y;
         for (int i = 0; i < numMeasurementsPerScan; i++)
         {
-            var t = (numMeasurementsPerScan > 1) ? (float)i / (numMeasurementsPerScan - 1) : 0f;
-            var yawSensorDegrees = Mathf.Lerp(scanAngleStartDegrees, scanAngleEndDegrees, t);
-            var yawDegrees = yawBaseDegrees - yawSensorDegrees; // ←元の実装を踏襲
+            float t = (numMeasurementsPerScan > 1) ? (float)i / (numMeasurementsPerScan - 1) : 0f;
+            float yawSensorDegrees = Mathf.Lerp(scanAngleStartDegrees, scanAngleEndDegrees, t);
+            float yawDegrees = yawBaseDegrees - yawSensorDegrees;
+
             var directionVector = Quaternion.Euler(0f, yawDegrees, 0f) * Vector3.forward;
-            var measurementStart = transform.position + (directionVector * rangeMetersMin);
+            var measurementStart = transform.position + directionVector * rangeMetersMin;
             var measurementRay = new Ray(measurementStart, directionVector);
 
             if (Physics.Raycast(measurementRay, out var hit, rangeMetersMax))
@@ -70,11 +85,15 @@ public class Ros2LaserScanPublisher_3 : MonoBehaviour
     private void PublishScan()
     {
         var timestamp = new TimeStamp(Unity.Robotics.Core.Clock.Now);
+
         float angleStartRos = -scanAngleEndDegrees * Mathf.Deg2Rad;
         float angleEndRos = -scanAngleStartDegrees * Mathf.Deg2Rad;
+
         if (angleStartRos > angleEndRos)
         {
-            var temp = angleEndRos; angleEndRos = angleStartRos; angleStartRos = temp;
+            float temp = angleEndRos;
+            angleEndRos = angleStartRos;
+            angleStartRos = temp;
             ranges.Reverse();
         }
 
@@ -82,12 +101,18 @@ public class Ros2LaserScanPublisher_3 : MonoBehaviour
         {
             Header = new std_msgs.msg.Header
             {
-                Frame_id = NsFrame(frameIdBase), // ← ns 付き frame_id
-                Stamp = new builtin_interfaces.msg.Time { Sec = timestamp.Seconds, Nanosec = timestamp.NanoSeconds }
+                Frame_id = NsFrame(frameIdBase),
+                Stamp = new builtin_interfaces.msg.Time
+                {
+                    Sec = timestamp.Seconds,
+                    Nanosec = timestamp.NanoSeconds
+                }
             },
             Angle_min = angleStartRos,
             Angle_max = angleEndRos,
-            Angle_increment = (numMeasurementsPerScan > 1) ? (angleEndRos - angleStartRos) / (numMeasurementsPerScan - 1) : 0,
+            Angle_increment = (numMeasurementsPerScan > 1)
+                ? (angleEndRos - angleStartRos) / (numMeasurementsPerScan - 1)
+                : 0f,
             Time_increment = 0f,
             Scan_time = (float)publishPeriodSeconds,
             Range_min = rangeMetersMin,
