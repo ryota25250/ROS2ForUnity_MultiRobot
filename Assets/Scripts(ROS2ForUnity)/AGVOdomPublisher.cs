@@ -12,13 +12,20 @@ public class AGVOdomPublisher : MonoBehaviour
 
     [Header("Publish Settings")]
     public float publishRateHz = 20f;
+    public bool publishTf = false;
+    public bool useInitialPoseAsOdomOrigin = true;
+    public string odomFrameId = "odom";
+    public string baseLinkFrameId = "base_link";
 
     private ROS2Node node;
     private IPublisher<nav_msgs.msg.Odometry> publisher;
+    private IPublisher<tf2_msgs.msg.TFMessage> tfPublisher;
 
     private Vector3 lastPosition;
     private float lastYawDeg;
     private double lastPublishTime;
+    private Vector3 initialPosition;
+    private Quaternion initialRotation;
 
     private string NsTopic(string name)
     {
@@ -33,6 +40,16 @@ public class AGVOdomPublisher : MonoBehaviour
     private string NodeName(string name)
     {
         return string.IsNullOrEmpty(robotNamespace) ? name : robotNamespace + "_" + name;
+    }
+
+    private geometry_msgs.msg.Point ToRosPoint(Vector3 v)
+    {
+        return new geometry_msgs.msg.Point
+        {
+            X = v.z,
+            Y = -v.x,
+            Z = v.y
+        };
     }
 
     private geometry_msgs.msg.Vector3 ToRosVector3(Vector3 v)
@@ -75,9 +92,17 @@ public class AGVOdomPublisher : MonoBehaviour
 
         node = ros2UnityComponent.CreateNode(NodeName("odom_publisher"));
         publisher = node.CreatePublisher<nav_msgs.msg.Odometry>(NsTopic("odom"));
+        if (publishTf)
+            tfPublisher = node.CreatePublisher<tf2_msgs.msg.TFMessage>("tf");
 
-        lastPosition = baseLink.position;
-        lastYawDeg = baseLink.eulerAngles.y;
+        initialPosition = baseLink.position;
+        initialRotation = baseLink.rotation;
+
+        Vector3 initialRelativePosition = GetRelativePosition();
+        Quaternion initialRelativeRotation = GetRelativeRotation();
+
+        lastPosition = initialRelativePosition;
+        lastYawDeg = initialRelativeRotation.eulerAngles.y;
         lastPublishTime = Unity.Robotics.Core.Clock.Now;
     }
 
@@ -93,8 +118,9 @@ public class AGVOdomPublisher : MonoBehaviour
         if (dt <= 0.0)
             return;
 
-        Vector3 currentPosition = baseLink.position;
-        float currentYawDeg = baseLink.eulerAngles.y;
+        Vector3 currentPosition = GetRelativePosition();
+        Quaternion currentRotation = GetRelativeRotation();
+        float currentYawDeg = currentRotation.eulerAngles.y;
 
         Vector3 linearVelUnity = (currentPosition - lastPosition) / (float)dt;
         float deltaYawDeg = Mathf.DeltaAngle(lastYawDeg, currentYawDeg);
@@ -111,17 +137,12 @@ public class AGVOdomPublisher : MonoBehaviour
             Nanosec = timestamp.NanoSeconds
         };
 
-        msg.Child_frame_id = NsFrame("base_link");
+        msg.Child_frame_id = NsFrame(baseLinkFrameId);
 
         msg.Pose = new geometry_msgs.msg.PoseWithCovariance();
         msg.Pose.Pose = new geometry_msgs.msg.Pose();
-        msg.Pose.Pose.Position = new geometry_msgs.msg.Point
-        {
-            X = currentPosition.z,
-            Y = -currentPosition.x,
-            Z = currentPosition.y
-        };
-        msg.Pose.Pose.Orientation = ToRosQuaternion(baseLink.rotation);
+        msg.Pose.Pose.Position = ToRosPoint(currentPosition);
+        msg.Pose.Pose.Orientation = ToRosQuaternion(currentRotation);
 
         // Covariance は read-only なので、配列ごと代入せず要素を書き込む
         for (int i = 0; i < msg.Pose.Covariance.Length; i++)
@@ -151,8 +172,53 @@ public class AGVOdomPublisher : MonoBehaviour
 
         publisher.Publish(msg);
 
+        if (publishTf && tfPublisher != null)
+        {
+            var tfMessage = new tf2_msgs.msg.TFMessage
+            {
+                Transforms = new[]
+                {
+                    new geometry_msgs.msg.TransformStamped
+                    {
+                        Header = new std_msgs.msg.Header
+                        {
+                            Frame_id = NsFrame(odomFrameId),
+                            Stamp = new builtin_interfaces.msg.Time
+                            {
+                                Sec = timestamp.Seconds,
+                                Nanosec = timestamp.NanoSeconds
+                            }
+                        },
+                        Child_frame_id = NsFrame(baseLinkFrameId),
+                        Transform = new geometry_msgs.msg.Transform
+                        {
+                            Translation = ToRosVector3(currentPosition),
+                            Rotation = ToRosQuaternion(currentRotation)
+                        }
+                    }
+                }
+            };
+            tfPublisher.Publish(tfMessage);
+        }
+
         lastPosition = currentPosition;
         lastYawDeg = currentYawDeg;
         lastPublishTime = now;
+    }
+
+    private Vector3 GetRelativePosition()
+    {
+        if (!useInitialPoseAsOdomOrigin)
+            return baseLink.position;
+
+        return Quaternion.Inverse(initialRotation) * (baseLink.position - initialPosition);
+    }
+
+    private Quaternion GetRelativeRotation()
+    {
+        if (!useInitialPoseAsOdomOrigin)
+            return baseLink.rotation;
+
+        return Quaternion.Inverse(initialRotation) * baseLink.rotation;
     }
 }

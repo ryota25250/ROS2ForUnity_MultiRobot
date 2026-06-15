@@ -42,6 +42,7 @@ public class Ros2TransformTreePublisher : MonoBehaviour
     [SerializeField] string robotNamespace = "robot1";
 
     [SerializeField] double m_PublishRateHz = 20f;
+    [SerializeField] bool m_PublishRootTransform = true;
     [SerializeField] List<string> m_GlobalFrameIds = new List<string> { "map", "odom" };
     [SerializeField] GameObject m_RootGameObject;
 
@@ -85,7 +86,7 @@ public class Ros2TransformTreePublisher : MonoBehaviour
         var timestamp = new Unity.Robotics.Core.TimeStamp(Unity.Robotics.Core.Clock.Now);
 
         // root ←→ 最後のグローバルフレーム（通常は odom）: ns を付与
-        if (m_GlobalFrameIds.Count > 0)
+        if (m_PublishRootTransform && m_GlobalFrameIds.Count > 0)
         {
             var tfRootToGlobal = new geometry_msgs.msg.TransformStamped
             {
